@@ -123,6 +123,119 @@ def main():
             baggage_fee_id += 1
 
     # -------------------
+    # FLIGHTS
+    # -------------------
+    start_date = datetime(2024, 1, 1)
+    end_date = datetime(2025, 12, 31)
+
+    flight_id = 1
+    flight_to_aircraft = {}   # FlightID -> AircraftID
+    flight_departure = {}     # FlightID -> DepartureDateTime
+
+    used_flight_numbers = set()  # to keep FlightNumber UNIQUE
+
+    for _ in range(NUM_FLIGHTS):
+        # generate a unique flight number like AC123
+        while True:
+            flight_num = f"AC{random.randint(100, 999)}"
+            if flight_num not in used_flight_numbers:
+                used_flight_numbers.add(flight_num)
+                break
+
+        dep = random_date(start_date, end_date)
+        duration_min = random.randint(45, 800)
+        arr = dep + timedelta(minutes=duration_min)
+        status = random.choice(flight_statuses)
+        rid = random.randint(1, max_route_id)
+        aid = random.randint(1, max_aircraft_id)
+
+        lines.append(
+            "INSERT INTO Flight (FlightID, FlightNumber, DepartureDateTime, ArrivalDateTime, `Status`, RouteID, AircraftID) "
+            f"VALUES ({flight_id}, '{flight_num}', '{dep.strftime('%Y-%m-%d %H:%M:%S')}', "
+            f"'{arr.strftime('%Y-%m-%d %H:%M:%S')}', '{status}', {rid}, {aid});"
+        )
+
+        flight_to_aircraft[flight_id] = aid
+        flight_departure[flight_id] = dep  # save departure time for bookings
+        flight_id += 1
+
+    max_flight_id = flight_id - 1
+
+    # -------------------
+    # SEATS (per aircraft) + map aircraft -> seat IDs
+    # -------------------
+    seat_id = 1
+    aircraft_seats = {}  # AircraftID -> list of SeatIDs
+    for aid in range(1, max_aircraft_id + 1):
+        capacity = random.randint(120, 300)
+        seat_letters = ["A", "B", "C", "D", "E", "F"]
+        count = 0
+        row = 1
+        aircraft_seats[aid] = []
+        while count < capacity:
+            for letter in seat_letters:
+                if count >= capacity:
+                    break
+                seat_number = f"{row}{letter}"
+                seat_class = "Economy"
+                if row <= 3:
+                    seat_class = "Business"
+                elif row <= 10:
+                    seat_class = "Premium Economy"
+                lines.append(
+                    "INSERT INTO Seat (SeatID, SeatNumber, Class, IsAvailable, AircraftID) "
+                    f"VALUES ({seat_id}, '{seat_number}', '{seat_class}', TRUE, {aid});"
+                )
+                aircraft_seats[aid].append(seat_id)
+                seat_id += 1
+                count += 1
+            row += 1
+
+    # -------------------
+    # BOOKINGS (assign SeatID and valid BookingDate)
+    # -------------------
+    booking_id = 1
+    used_flight_seats = {}  # FlightID -> set of SeatIDs already used on that flight
+
+    for i in range(NUM_BOOKINGS):
+        code = f"BK{100000 + i}"
+        seat_class = random.choice(seat_classes)
+
+        # pick a flight first
+        fid = random.randint(1, max_flight_id)
+        dep_dt = flight_departure[fid]
+
+        # choose booking date between global start_date and that flight's departure
+        # (ensures BookingDate <= DepartureDateTime, satisfying the trigger)
+        bdate = random_date(start_date, dep_dt).date()
+
+        price = round(random.uniform(100, 2000), 2)
+        pid = random.randint(1, max_passenger_id)
+        status = random.choice(booking_statuses)
+
+        # Determine Aircraft for this Flight
+        aircraft_id_for_flight = flight_to_aircraft[fid]
+        seats_for_aircraft = aircraft_seats[aircraft_id_for_flight]
+
+        if fid not in used_flight_seats:
+            used_flight_seats[fid] = set()
+
+        seat_id_sql = "NULL"
+        available_seats = list(set(seats_for_aircraft) - used_flight_seats[fid])
+        if available_seats:
+            chosen_seat_id = random.choice(available_seats)
+            used_flight_seats[fid].add(chosen_seat_id)
+            seat_id_sql = str(chosen_seat_id)
+        # else: no seats left → SeatID stays NULL, which is allowed
+
+        lines.append(
+            "INSERT INTO Booking (BookingID, BookingCode, SeatClass, BookingDate, Price, FlightID, PassengerID, SeatID, `Status`) "
+            f"VALUES ({booking_id}, '{code}', '{seat_class}', '{bdate}', {price}, {fid}, {pid}, {seat_id_sql}, '{status}');"
+        )
+        booking_id += 1
+    max_booking_id = booking_id - 1
+
+    # -------------------
     # OUTPUT
     # -------------------
     with open("aerodb_data.sql", "w", encoding="utf-8") as f:

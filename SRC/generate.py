@@ -93,6 +93,36 @@ def main():
     max_passenger_id = passenger_id - 1
 
     # -------------------
+    # BAGGAGE FEE (range-based)
+    # -------------------
+    baggage_fee_ranges = {
+        "CarryOn": [
+            (0.00, 10.00, 0.00),
+            (10.01, 23.00, 30.00),
+        ],
+        "Checked": [
+            (0.00, 23.00, 35.00),
+            (23.01, 32.00, 75.00),
+            (32.01, 45.00, 150.00),
+        ],
+        "Oversized": [
+            (0.00, 32.00, 200.00),
+            (32.01, 45.00, 250.00),
+        ],
+    }
+
+    baggage_fee_id = 1
+    baggage_fee_rows = []  # (BaggageFeeID, Type, MinWeight, MaxWeight)
+    for btype, ranges in baggage_fee_ranges.items():
+        for (min_w, max_w, fee) in ranges:
+            lines.append(
+                "INSERT INTO BaggageFee (FeeID, `Type`, MinWeightKG, MaxWeightKG, Fee) "
+                f"VALUES ({baggage_fee_id}, '{btype}', {min_w:.2f}, {max_w:.2f}, {fee:.2f});"
+            )
+            baggage_fee_rows.append((baggage_fee_id, btype, min_w, max_w))
+            baggage_fee_id += 1
+
+    # -------------------
     # OUTPUT
     # -------------------
     with open("aerodb_data.sql", "w", encoding="utf-8") as f:

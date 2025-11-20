@@ -192,6 +192,27 @@ def main():
             row += 1
 
     # -------------------
+    # CREW MEMBERS
+    # -------------------
+    crew_id = 1
+    for i in range(NUM_CREW):
+        fn = random.choice(first_names)
+        ln = random.choice(last_names)
+        name = f"{fn} {ln}"
+        role = random.choice(crew_roles)
+        if role in ["Pilot", "CoPilot"]:
+            cert = f"ATPL-{random.randint(1000,9999)}"
+        else:
+            cert = f"FA-{random.randint(1000,9999)}"
+        contact = f"{fn.lower()}.{ln.lower()}{i}@airlinecrew.com"
+        lines.append(
+            "INSERT INTO CrewMember (CrewID, `Name`, `Role`, Certification, Contact) "
+            f"VALUES ({crew_id}, '{name}', '{role}', '{cert}', '{contact}');"
+        )
+        crew_id += 1
+    max_crew_id = crew_id - 1
+
+    # -------------------
     # BOOKINGS (assign SeatID and valid BookingDate)
     # -------------------
     booking_id = 1
@@ -234,6 +255,44 @@ def main():
         )
         booking_id += 1
     max_booking_id = booking_id - 1
+
+    # -------------------
+    # FLIGHT CREW ASSIGNMENTS
+    # -------------------
+    assignment_id = 1
+    for fid in range(1, max_flight_id + 1):
+        # For each flight, assign 5 distinct crew members
+        assigned_crew = random.sample(range(1, max_crew_id + 1), k=5)
+        for cid in assigned_crew:
+            lines.append(
+                "INSERT INTO FlightCrewAssignment (AssignmentID, FlightID, CrewID) "
+                f"VALUES ({assignment_id}, {fid}, {cid});"
+            )
+            assignment_id += 1
+
+    # -------------------
+    # BAGGAGE (now uses BaggageFeeID + Type + WeightKG)
+    # -------------------
+    baggage_id = 1
+    tag_number = 100000
+    for _ in range(NUM_BAGGAGE):
+        bid = random.randint(1, max_booking_id)
+        # choose a random fee row and generate weight within its range
+        fee_row = random.choice(baggage_fee_rows)
+        fee_id, btype, min_w, max_w = fee_row
+        # Ensure weight is always > 0 to satisfy check constraint (WeightKG > 0)
+        effective_min = 0.01 if min_w == 0.0 else min_w
+        weight = round(random.uniform(effective_min, max_w), 2)
+        # Safety check: ensure weight is never exactly 0
+        if weight <= 0.0:
+            weight = 0.01
+        status = random.choice(["CheckedIn", "Loaded", "InTransit", "Delivered"])
+        lines.append(
+            "INSERT INTO Baggage (BaggageID, BookingID, TagNumber, FeeID, `Type`, WeightKG, `Status`) "
+            f"VALUES ({baggage_id}, {bid}, {tag_number}, {fee_id}, '{btype}', {weight:.2f}, '{status}');"
+        )
+        baggage_id += 1
+        tag_number += 1
 
     # -------------------
     # OUTPUT
